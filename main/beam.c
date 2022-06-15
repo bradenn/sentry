@@ -14,7 +14,7 @@ Beam configureBeam(gpio_num_t gpio, ledc_channel_t channel, ledc_timer_t timer) 
             .speed_mode       = BEAM_SPEED_MODE,
             .timer_num        = timer,
             .duty_resolution  = LEDC_TIMER_13_BIT,
-            .freq_hz          = 2500,  // 2.5khz
+            .freq_hz          = 5000,  // 2.5khz
             .clk_cfg          = LEDC_AUTO_CLK
     };
 

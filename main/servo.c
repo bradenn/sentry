@@ -12,7 +12,7 @@
 Servo configureServo(gpio_num_t gpio, ledc_channel_t channel, ledc_timer_t timer) {
     // Enable the PWM timer
     ledc_timer_config_t ledc_timer = {
-            .speed_mode       = LEDC_LOW_SPEED_MODE,
+            .speed_mode       = LEDC_HIGH_SPEED_MODE,
             .timer_num        = timer,
             .duty_resolution  = LEDC_TIMER_13_BIT,
             .freq_hz          = 50,  // 50hz
@@ -23,7 +23,7 @@ Servo configureServo(gpio_num_t gpio, ledc_channel_t channel, ledc_timer_t timer
 
     // Enable the channel
     ledc_channel_config_t ledc_channel = {
-            .speed_mode     = LEDC_LOW_SPEED_MODE,
+            .speed_mode     = LEDC_HIGH_SPEED_MODE,
             .channel        = channel,
             .timer_sel      = timer,
             .intr_type      = LEDC_INTR_DISABLE,
