@@ -9,38 +9,24 @@
 //
 // Created by Braden Nicholson on 6/14/22.
 //
-Servo configureServo(gpio_num_t gpio, ledc_channel_t channel, ledc_timer_t timer) {
-    // Enable the PWM timer
-    ledc_timer_config_t ledc_timer = {
-            .speed_mode       = LEDC_HIGH_SPEED_MODE,
-            .timer_num        = timer,
-            .duty_resolution  = LEDC_TIMER_13_BIT,
-            .freq_hz          = 50,  // 50hz
-            .clk_cfg          = LEDC_AUTO_CLK
+Servo configureServo(gpio_num_t gpio, mcpwm_unit_t unit, mcpwm_timer_t timer) {
+    mcpwm_gpio_init(unit, MCPWM0A, gpio);
+    mcpwm_config_t pwm_config = {
+            .frequency = 50, // frequency = 50Hz, i.e. for every servo motor time period should be 20ms
+            .cmpr_a = 0,     // duty cycle of PWMxA = 0
+            .counter_mode = MCPWM_UP_COUNTER,
+            .duty_mode = MCPWM_DUTY_MODE_0,
     };
 
-    ESP_ERROR_CHECK(ledc_timer_config(&ledc_timer));
-
-    // Enable the channel
-    ledc_channel_config_t ledc_channel = {
-            .speed_mode     = LEDC_HIGH_SPEED_MODE,
-            .channel        = channel,
-            .timer_sel      = timer,
-            .intr_type      = LEDC_INTR_DISABLE,
-            .gpio_num       = gpio,
-            .duty           = 0, // Set duty to 0%
-            .hpoint         = 0
-    };
-
-    ESP_ERROR_CHECK(ledc_channel_config(&ledc_channel));
-
-    Servo target;
-    target.gpio = gpio;
-    target.channel = channel;
-
-    return target;
+    mcpwm_init(unit, timer, &pwm_config);
+    Servo servo;
+    servo.timer = timer;
+    servo.unit = unit;
+    servo.gpio = gpio;
+    return servo;
 }
 
 void moveTo(Servo servo, int position) {
-    // Write this
+    mcpwm_set_duty_in_us(servo.unit, servo.timer, MCPWM_OPR_A, angleToDuty(position));
+//    vTaskDelay(pdMS_TO_TICKS(10));
 }
