@@ -16,6 +16,7 @@ typedef struct Beam {
     gpio_num_t gpio;
     ledc_channel_t channel;
     int opticalOutput;
+    int active;
 } Beam;
 
 Beam configureBeam(gpio_num_t gpio, ledc_channel_t channel, ledc_timer_t timer);

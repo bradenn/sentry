@@ -5,8 +5,13 @@
 #ifndef SENTRY_SERVER_H
 #define SENTRY_SERVER_H
 
+#include "servo.h"
+#include "beam.h"
+#include "sentry.h"
+
 
 void startServer();
-void setupServer();
+
+void setupServer(Sentry sentry);
 
 #endif //SENTRY_SERVER_H

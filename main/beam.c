@@ -36,6 +36,7 @@ Beam configureBeam(gpio_num_t gpio, ledc_channel_t channel, ledc_timer_t timer) 
     Beam target;
     target.gpio = gpio;
     target.channel = channel;
+    target.active = 0;
 
     return target;
 }
@@ -46,17 +47,22 @@ int map_range(int value, int low1, int high1, int low2, int high2) {
 
 void setBeamOpticalOutput(Beam target, int mw) {
     int mapped = map_range(mw, 0, target.opticalOutput, 0, (1 << 13) - 1);
-    ESP_ERROR_CHECK(ledc_set_duty(BEAM_SPEED_MODE, target.channel, mapped));
+    setBeamOutput(target, mapped);
+}
+
+void activateBeam(Beam *target) {
+    target->active = 1;
+}
+
+void deactivateBeam(Beam *target) {
+    ESP_ERROR_CHECK(ledc_set_duty(BEAM_SPEED_MODE, target->channel, 0));
+    ESP_ERROR_CHECK(ledc_update_duty(BEAM_SPEED_MODE, target->channel));
+    target->active = 0;
 }
 
 void setBeamOutput(Beam target, uint32_t duty) {
-
     ESP_ERROR_CHECK(ledc_set_duty(BEAM_SPEED_MODE, target.channel, duty));
-
-}
-
-void applyBeamOutput(Beam target) {
-
-    ESP_ERROR_CHECK(ledc_update_duty(BEAM_SPEED_MODE, target.channel));
-
+    if (target.active) {
+        ESP_ERROR_CHECK(ledc_update_duty(BEAM_SPEED_MODE, target.channel));
+    }
 }

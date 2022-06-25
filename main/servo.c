@@ -1,11 +1,5 @@
 #include <driver/gpio.h>
-#include <driver/ledc.h>
-
 #include "servo.h"
-#include "freertos/FreeRTOS.h"
-#include "freertos/task.h"
-#include "sdkconfig.h"
-
 //
 // Created by Braden Nicholson on 6/14/22.
 //
@@ -23,10 +17,12 @@ Servo configureServo(gpio_num_t gpio, mcpwm_unit_t unit, mcpwm_timer_t timer) {
     servo.timer = timer;
     servo.unit = unit;
     servo.gpio = gpio;
+    servo.position = 0;
     return servo;
 }
 
-void moveTo(Servo servo, int position) {
-    mcpwm_set_duty_in_us(servo.unit, servo.timer, MCPWM_OPR_A, angleToDuty(position));
+void moveTo(Servo *servo, int position) {
+    mcpwm_set_duty_in_us(servo->unit, servo->timer, MCPWM_OPR_A, angleToDuty(position));
+    servo->position = position;
 //    vTaskDelay(pdMS_TO_TICKS(10));
 }

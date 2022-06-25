@@ -3,25 +3,25 @@
 //
 
 #include "server.h"
-#include <esp_wifi.h>
 #include <esp_event.h>
 #include <esp_log.h>
 #include <esp_system.h>
 #include <nvs_flash.h>
 #include <sys/param.h>
-#include "nvs_flash.h"
 #include "esp_netif.h"
 #include "esp_eth.h"
 
 #include "esp_tls_crypto.h"
 #include "wifi.h"
 #include "indicator.h"
+#include "sentry.h"
 #include <esp_http_server.h>
 
-static const char *TAG = "example";
+static const char *TAG = "HTTP";
+
+
 
 #if CONFIG_EXAMPLE_BASIC_AUTH
-
 typedef struct {
     char    *username;
     char    *password;
@@ -138,12 +138,15 @@ static void httpd_register_basic_auth(httpd_handle_t server)
     }
 }
 #endif
+static Sentry sentry;
 
 /* An HTTP GET handler */
-static esp_err_t hello_get_handler(httpd_req_t *req)
-{
-    char*  buf;
+static esp_err_t getStatusHandler(httpd_req_t *req) {
+    char *buf;
     size_t buf_len;
+
+    moveTo(&sentry.tilt, sentry.tilt.position == 960?-960:960);
+    moveTo(&sentry.pan, sentry.pan.position == 960?-960:960);
 
     /* Get header value string length and allocate memory for length + 1,
      * extra byte for null termination */
@@ -153,24 +156,6 @@ static esp_err_t hello_get_handler(httpd_req_t *req)
         /* Copy null terminated value string into buffer */
         if (httpd_req_get_hdr_value_str(req, "Host", buf, buf_len) == ESP_OK) {
             ESP_LOGI(TAG, "Found header => Host: %s", buf);
-        }
-        free(buf);
-    }
-
-    buf_len = httpd_req_get_hdr_value_len(req, "Test-Header-2") + 1;
-    if (buf_len > 1) {
-        buf = malloc(buf_len);
-        if (httpd_req_get_hdr_value_str(req, "Test-Header-2", buf, buf_len) == ESP_OK) {
-            ESP_LOGI(TAG, "Found header => Test-Header-2: %s", buf);
-        }
-        free(buf);
-    }
-
-    buf_len = httpd_req_get_hdr_value_len(req, "Test-Header-1") + 1;
-    if (buf_len > 1) {
-        buf = malloc(buf_len);
-        if (httpd_req_get_hdr_value_str(req, "Test-Header-1", buf, buf_len) == ESP_OK) {
-            ESP_LOGI(TAG, "Found header => Test-Header-1: %s", buf);
         }
         free(buf);
     }
@@ -197,35 +182,38 @@ static esp_err_t hello_get_handler(httpd_req_t *req)
         free(buf);
     }
 
-    /* Set some custom headers */
-    httpd_resp_set_hdr(req, "Custom-Header-1", "Custom-Value-1");
-    httpd_resp_set_hdr(req, "Custom-Header-2", "Custom-Value-2");
+    /* Set CORS header */
+    httpd_resp_set_hdr(req, "Access-Control-Allow-Origin", "*");
 
     /* Send response with custom headers and body set as the
      * string passed in user context*/
-    const char* resp_str = (const char*) req->user_ctx;
-    httpd_resp_send(req, resp_str, HTTPD_RESP_USE_STRLEN);
+    char *resp_str = formatJSON(sentry);
 
+
+
+    httpd_resp_send(req, resp_str, HTTPD_RESP_USE_STRLEN);
     /* After sending the HTTP response the old HTTP request
      * headers are lost. Check if HTTP request headers can be read now. */
     if (httpd_req_get_hdr_value_len(req, "Host") == 0) {
         ESP_LOGI(TAG, "Request headers lost");
     }
+    free(resp_str);
+
+
     return ESP_OK;
 }
 
 static const httpd_uri_t hello = {
-        .uri       = "/hello",
+        .uri       = "/status",
         .method    = HTTP_GET,
-        .handler   = hello_get_handler,
+        .handler   = getStatusHandler,
         /* Let's pass response string in user
          * context to demonstrate it's usage */
         .user_ctx  = "Hello World!"
 };
 
 /* An HTTP POST handler */
-static esp_err_t echo_post_handler(httpd_req_t *req)
-{
+static esp_err_t echo_post_handler(httpd_req_t *req) {
     char buf[100];
     int ret, remaining = req->content_len;
 
@@ -273,8 +261,7 @@ static const httpd_uri_t echo = {
  * client to infer if the custom error handler is functioning as expected
  * by observing the socket state.
  */
-esp_err_t http_404_error_handler(httpd_req_t *req, httpd_err_code_t err)
-{
+esp_err_t http_404_error_handler(httpd_req_t *req, httpd_err_code_t err) {
     if (strcmp("/hello", req->uri) == 0) {
         httpd_resp_send_err(req, HTTPD_404_NOT_FOUND, "/hello URI is not available");
         /* Return ESP_OK to keep underlying socket open */
@@ -292,8 +279,7 @@ esp_err_t http_404_error_handler(httpd_req_t *req, httpd_err_code_t err)
 /* An HTTP PUT handler. This demonstrates realtime
  * registration and deregistration of URI handlers
  */
-static esp_err_t ctrl_put_handler(httpd_req_t *req)
-{
+static esp_err_t ctrl_put_handler(httpd_req_t *req) {
     char buf;
     int ret;
 
@@ -311,8 +297,7 @@ static esp_err_t ctrl_put_handler(httpd_req_t *req)
         httpd_unregister_uri(req->handle, "/echo");
         /* Register the custom error handler */
         httpd_register_err_handler(req->handle, HTTPD_404_NOT_FOUND, http_404_error_handler);
-    }
-    else {
+    } else {
         ESP_LOGI(TAG, "Registering /hello and /echo URIs");
         httpd_register_uri_handler(req->handle, &hello);
         httpd_register_uri_handler(req->handle, &echo);
@@ -332,8 +317,7 @@ static const httpd_uri_t ctrl = {
         .user_ctx  = NULL
 };
 
-static httpd_handle_t start_webserver(void)
-{
+static httpd_handle_t start_webserver(void) {
     httpd_handle_t server = NULL;
     httpd_config_t config = HTTPD_DEFAULT_CONFIG();
     config.lru_purge_enable = true;
@@ -356,16 +340,14 @@ static httpd_handle_t start_webserver(void)
     return NULL;
 }
 
-static esp_err_t stop_webserver(httpd_handle_t server)
-{
+static esp_err_t stop_webserver(httpd_handle_t server) {
     // Stop the httpd server
     return httpd_stop(server);
 }
 
-static void disconnect_handler(void* arg, esp_event_base_t event_base,
-                               int32_t event_id, void* event_data)
-{
-    httpd_handle_t* server = (httpd_handle_t*) arg;
+static void disconnect_handler(void *arg, esp_event_base_t event_base,
+                               int32_t event_id, void *event_data) {
+    httpd_handle_t *server = (httpd_handle_t *) arg;
     if (*server) {
         ESP_LOGI(TAG, "Stopping webserver");
         if (stop_webserver(*server) == ESP_OK) {
@@ -376,18 +358,19 @@ static void disconnect_handler(void* arg, esp_event_base_t event_base,
     }
 }
 
-static void connect_handler(void* arg, esp_event_base_t event_base,
-                            int32_t event_id, void* event_data)
-{
-    httpd_handle_t* server = (httpd_handle_t*) arg;
+static void connect_handler(void *arg, esp_event_base_t event_base,
+                            int32_t event_id, void *event_data) {
+    httpd_handle_t *server = (httpd_handle_t *) arg;
     if (*server == NULL) {
         ESP_LOGI(TAG, "Starting webserver");
         *server = start_webserver();
     }
 }
 
-void setupServer()
-{
+void setupServer(Sentry sen) {
+    sentry = sen;
+    moveTo(&sentry.pan, 0);
+    moveTo(&sentry.tilt, 0);
 
     setIndicator(RED);
     ESP_ERROR_CHECK(nvs_flash_init());

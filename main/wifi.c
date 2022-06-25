@@ -10,7 +10,6 @@
 #include "esp_wifi.h"
 #include "esp_event.h"
 #include "esp_log.h"
-#include "nvs_flash.h"
 
 
 #define WIFI_SSID CONFIG_ESP_WIFI_SSID
@@ -51,10 +50,6 @@ static void eventHandler(void *arg, esp_event_base_t event_base, int32_t event_i
 
 int wifiInit() {
     s_wifi_event_group = xEventGroupCreate();
-
-    ESP_ERROR_CHECK(esp_netif_init());
-
-    ESP_ERROR_CHECK(esp_event_loop_create_default());
 
     esp_netif_create_default_wifi_sta();
 
