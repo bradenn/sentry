@@ -34,7 +34,7 @@ char *formatJSON(Sentry sentry) {
     // Beam Object
     cJSON *beams = cJSON_CreateObject();
 
-    cJSON *beamPrimary = cJSON_CreateNumber(sentry.primary.active == 1);
+    cJSON *beamPrimary = cJSON_CreateBool(sentry.primary.active == 1);
     cJSON_AddItemToObject(beams, "primary", beamPrimary);
 
     cJSON *beamSecondary = cJSON_CreateBool(sentry.secondary.active == 1);

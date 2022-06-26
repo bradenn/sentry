@@ -16,21 +16,22 @@
 #include "indicator.h"
 #include "sentry.h"
 #include <esp_http_server.h>
+#include <cJSON.h>
 
 static const char *TAG = "HTTP";
 
-
-
-#if CONFIG_EXAMPLE_BASIC_AUTH
 typedef struct {
-    char    *username;
-    char    *password;
+    char *username;
+    char *password;
 } basic_auth_info_t;
 
 #define HTTPD_401      "401 UNAUTHORIZED"           /*!< HTTP Response 401 */
 
-static char *http_auth_basic(const char *username, const char *password)
-{
+#define USERNAME CONFIG_SENTRY_AUTH_USER
+#define PASSWORD CONFIG_SENTRY_AUTH_PASS
+
+
+static char *http_auth_basic(const char *username, const char *password) {
     int out;
     char *user_info = NULL;
     char *digest = NULL;
@@ -40,7 +41,7 @@ static char *http_auth_basic(const char *username, const char *password)
         ESP_LOGE(TAG, "No enough memory for user information");
         return NULL;
     }
-    esp_crypto_base64_encode(NULL, 0, &n, (const unsigned char *)user_info, strlen(user_info));
+    esp_crypto_base64_encode(NULL, 0, &n, (const unsigned char *) user_info, strlen(user_info));
 
     /* 6: The length of the "Basic " string
      * n: Number of bytes for a base64 encode format
@@ -49,15 +50,15 @@ static char *http_auth_basic(const char *username, const char *password)
     digest = calloc(1, 6 + n + 1);
     if (digest) {
         strcpy(digest, "Basic ");
-        esp_crypto_base64_encode((unsigned char *)digest + 6, n, (size_t *)&out, (const unsigned char *)user_info, strlen(user_info));
+        esp_crypto_base64_encode((unsigned char *) digest + 6, n, (size_t *) &out, (const unsigned char *) user_info,
+                                 strlen(user_info));
     }
     free(user_info);
     return digest;
 }
 
 /* An HTTP GET handler */
-static esp_err_t basic_auth_get_handler(httpd_req_t *req)
-{
+static esp_err_t basic_auth_get_handler(httpd_req_t *req) {
     char *buf = NULL;
     size_t buf_len = 0;
     basic_auth_info_t *basic_auth_info = req->user_ctx;
@@ -83,7 +84,7 @@ static esp_err_t basic_auth_get_handler(httpd_req_t *req)
             return ESP_ERR_NO_MEM;
         }
 
-        if (strncmp(auth_credentials, buf, buf_len)) {
+        if (strncmp(auth_credentials, buf, buf_len) != 0) {
             ESP_LOGE(TAG, "Not authenticated");
             httpd_resp_set_status(req, HTTPD_401);
             httpd_resp_set_type(req, "application/json");
@@ -121,66 +122,26 @@ static esp_err_t basic_auth_get_handler(httpd_req_t *req)
 }
 
 static httpd_uri_t basic_auth = {
-    .uri       = "/basic_auth",
-    .method    = HTTP_GET,
-    .handler   = basic_auth_get_handler,
+        .uri       = "/auth",
+        .method    = HTTP_GET,
+        .handler   = basic_auth_get_handler,
 };
 
-static void httpd_register_basic_auth(httpd_handle_t server)
-{
+static void httpd_register_basic_auth(httpd_handle_t server) {
     basic_auth_info_t *basic_auth_info = calloc(1, sizeof(basic_auth_info_t));
     if (basic_auth_info) {
-        basic_auth_info->username = CONFIG_EXAMPLE_BASIC_AUTH_USERNAME;
-        basic_auth_info->password = CONFIG_EXAMPLE_BASIC_AUTH_PASSWORD;
+        basic_auth_info->username = USERNAME;
+        basic_auth_info->password = PASSWORD;
 
         basic_auth.user_ctx = basic_auth_info;
         httpd_register_uri_handler(server, &basic_auth);
     }
 }
-#endif
+
 static Sentry sentry;
 
 /* An HTTP GET handler */
 static esp_err_t getStatusHandler(httpd_req_t *req) {
-    char *buf;
-    size_t buf_len;
-
-    moveTo(&sentry.tilt, sentry.tilt.position == 960?-960:960);
-    moveTo(&sentry.pan, sentry.pan.position == 960?-960:960);
-
-    /* Get header value string length and allocate memory for length + 1,
-     * extra byte for null termination */
-    buf_len = httpd_req_get_hdr_value_len(req, "Host") + 1;
-    if (buf_len > 1) {
-        buf = malloc(buf_len);
-        /* Copy null terminated value string into buffer */
-        if (httpd_req_get_hdr_value_str(req, "Host", buf, buf_len) == ESP_OK) {
-            ESP_LOGI(TAG, "Found header => Host: %s", buf);
-        }
-        free(buf);
-    }
-
-    /* Read URL query string length and allocate memory for length + 1,
-     * extra byte for null termination */
-    buf_len = httpd_req_get_url_query_len(req) + 1;
-    if (buf_len > 1) {
-        buf = malloc(buf_len);
-        if (httpd_req_get_url_query_str(req, buf, buf_len) == ESP_OK) {
-            ESP_LOGI(TAG, "Found URL query => %s", buf);
-            char param[32];
-            /* Get value of expected key from query string */
-            if (httpd_query_key_value(buf, "query1", param, sizeof(param)) == ESP_OK) {
-                ESP_LOGI(TAG, "Found URL query parameter => query1=%s", param);
-            }
-            if (httpd_query_key_value(buf, "query3", param, sizeof(param)) == ESP_OK) {
-                ESP_LOGI(TAG, "Found URL query parameter => query3=%s", param);
-            }
-            if (httpd_query_key_value(buf, "query2", param, sizeof(param)) == ESP_OK) {
-                ESP_LOGI(TAG, "Found URL query parameter => query2=%s", param);
-            }
-        }
-        free(buf);
-    }
 
     /* Set CORS header */
     httpd_resp_set_hdr(req, "Access-Control-Allow-Origin", "*");
@@ -189,21 +150,20 @@ static esp_err_t getStatusHandler(httpd_req_t *req) {
      * string passed in user context*/
     char *resp_str = formatJSON(sentry);
 
-
-
     httpd_resp_send(req, resp_str, HTTPD_RESP_USE_STRLEN);
+
     /* After sending the HTTP response the old HTTP request
      * headers are lost. Check if HTTP request headers can be read now. */
     if (httpd_req_get_hdr_value_len(req, "Host") == 0) {
         ESP_LOGI(TAG, "Request headers lost");
     }
-    free(resp_str);
 
+    free(resp_str);
 
     return ESP_OK;
 }
 
-static const httpd_uri_t hello = {
+static const httpd_uri_t status = {
         .uri       = "/status",
         .method    = HTTP_GET,
         .handler   = getStatusHandler,
@@ -212,110 +172,71 @@ static const httpd_uri_t hello = {
         .user_ctx  = "Hello World!"
 };
 
-/* An HTTP POST handler */
-static esp_err_t echo_post_handler(httpd_req_t *req) {
-    char buf[100];
-    int ret, remaining = req->content_len;
+/* An HTTP PUT handler */
+static esp_err_t positionHandler(httpd_req_t *req) {
 
-    while (remaining > 0) {
-        /* Read the data for the request */
-        if ((ret = httpd_req_recv(req, buf,
-                                  MIN(remaining, sizeof(buf)))) <= 0) {
-            if (ret == HTTPD_SOCK_ERR_TIMEOUT) {
-                /* Retry receiving if timeout occurred */
-                continue;
-            }
-            return ESP_FAIL;
+    /* Set CORS header */
+    httpd_resp_set_hdr(req, "Access-Control-Allow-Origin", "*");
+
+
+    char content[100];
+
+    /* Truncate if content length larger than the buffer */
+    size_t recv_size = MIN(req->content_len, sizeof(content));
+
+    int ret = httpd_req_recv(req, content, recv_size);
+    if (ret <= 0) {  /* 0 return value indicates connection closed */
+        /* Check if timeout occurred */
+        if (ret == HTTPD_SOCK_ERR_TIMEOUT) {
+            /* In case of timeout one can choose to retry calling
+             * httpd_req_recv(), but to keep it simple, here we
+             * respond with an HTTP 408 (Request Timeout) error */
+            httpd_resp_send_408(req);
         }
-
-        /* Send back the same data */
-        httpd_resp_send_chunk(req, buf, ret);
-        remaining -= ret;
-
-        /* Log data received */
-        ESP_LOGI(TAG, "=========== RECEIVED DATA ==========");
-        ESP_LOGI(TAG, "%.*s", ret, buf);
-        ESP_LOGI(TAG, "====================================");
+        /* In case of error, returning ESP_FAIL will
+         * ensure that the underlying socket is closed */
+        return ESP_FAIL;
     }
 
-    // End response
-    httpd_resp_send_chunk(req, NULL, 0);
+    cJSON *request = cJSON_Parse(content);
+
+    if(!cJSON_HasObjectItem(request, "target") || !cJSON_HasObjectItem(request, "position")){
+        httpd_resp_send_404(req);
+        return ESP_FAIL;
+    }
+
+    char *target = cJSON_GetObjectItem(request, "target")->valuestring;
+
+    int pos = cJSON_GetObjectItem(request, "position")->valueint;
+
+    if (strncmp(target, "pan", 3) == 0) {
+        moveTo(&sentry.pan, pos);
+    } else if (strncmp(target, "tilt", 4) == 0) {
+        moveTo(&sentry.tilt, pos);
+    }
+
+    char *resp_str = formatJSON(sentry);
+
+    httpd_resp_send(req, resp_str, HTTPD_RESP_USE_STRLEN);
+
+    free(resp_str);
+
+    cJSON_Delete(request);
+
     return ESP_OK;
 }
 
-static const httpd_uri_t echo = {
-        .uri       = "/echo",
+static const httpd_uri_t position = {
+        .uri       = "/position",
         .method    = HTTP_POST,
-        .handler   = echo_post_handler,
-        .user_ctx  = NULL
+        .handler   = positionHandler,
 };
 
-/* This handler allows the custom error handling functionality to be
- * tested from client side. For that, when a PUT request 0 is sent to
- * URI /ctrl, the /hello and /echo URIs are unregistered and following
- * custom error handler http_404_error_handler() is registered.
- * Afterwards, when /hello or /echo is requested, this custom error
- * handler is invoked which, after sending an error message to client,
- * either closes the underlying socket (when requested URI is /echo)
- * or keeps it open (when requested URI is /hello). This allows the
- * client to infer if the custom error handler is functioning as expected
- * by observing the socket state.
- */
 esp_err_t http_404_error_handler(httpd_req_t *req, httpd_err_code_t err) {
-    if (strcmp("/hello", req->uri) == 0) {
-        httpd_resp_send_err(req, HTTPD_404_NOT_FOUND, "/hello URI is not available");
-        /* Return ESP_OK to keep underlying socket open */
-        return ESP_OK;
-    } else if (strcmp("/echo", req->uri) == 0) {
-        httpd_resp_send_err(req, HTTPD_404_NOT_FOUND, "/echo URI is not available");
-        /* Return ESP_FAIL to close underlying socket */
-        return ESP_FAIL;
-    }
     /* For any other URI send 404 and close socket */
     httpd_resp_send_err(req, HTTPD_404_NOT_FOUND, "Some 404 error message");
     return ESP_FAIL;
 }
-
-/* An HTTP PUT handler. This demonstrates realtime
- * registration and deregistration of URI handlers
- */
-static esp_err_t ctrl_put_handler(httpd_req_t *req) {
-    char buf;
-    int ret;
-
-    if ((ret = httpd_req_recv(req, &buf, 1)) <= 0) {
-        if (ret == HTTPD_SOCK_ERR_TIMEOUT) {
-            httpd_resp_send_408(req);
-        }
-        return ESP_FAIL;
-    }
-
-    if (buf == '0') {
-        /* URI handlers can be unregistered using the uri string */
-        ESP_LOGI(TAG, "Unregistering /hello and /echo URIs");
-        httpd_unregister_uri(req->handle, "/hello");
-        httpd_unregister_uri(req->handle, "/echo");
-        /* Register the custom error handler */
-        httpd_register_err_handler(req->handle, HTTPD_404_NOT_FOUND, http_404_error_handler);
-    } else {
-        ESP_LOGI(TAG, "Registering /hello and /echo URIs");
-        httpd_register_uri_handler(req->handle, &hello);
-        httpd_register_uri_handler(req->handle, &echo);
-        /* Unregister custom error handler */
-        httpd_register_err_handler(req->handle, HTTPD_404_NOT_FOUND, NULL);
-    }
-
-    /* Respond with empty body */
-    httpd_resp_send(req, NULL, 0);
-    return ESP_OK;
-}
-
-static const httpd_uri_t ctrl = {
-        .uri       = "/ctrl",
-        .method    = HTTP_PUT,
-        .handler   = ctrl_put_handler,
-        .user_ctx  = NULL
-};
 
 static httpd_handle_t start_webserver(void) {
     httpd_handle_t server = NULL;
@@ -327,12 +248,9 @@ static httpd_handle_t start_webserver(void) {
     if (httpd_start(&server, &config) == ESP_OK) {
         // Set URI handlers
         ESP_LOGI(TAG, "Registering URI handlers");
-        httpd_register_uri_handler(server, &hello);
-        httpd_register_uri_handler(server, &echo);
-        httpd_register_uri_handler(server, &ctrl);
-#if CONFIG_EXAMPLE_BASIC_AUTH
+        httpd_register_uri_handler(server, &status);
+        httpd_register_uri_handler(server, &position);
         httpd_register_basic_auth(server);
-#endif
         return server;
     }
 
@@ -341,7 +259,6 @@ static httpd_handle_t start_webserver(void) {
 }
 
 static esp_err_t stop_webserver(httpd_handle_t server) {
-    // Stop the httpd server
     return httpd_stop(server);
 }
 
