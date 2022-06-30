@@ -57,6 +57,8 @@ int wifiInit() {
 
     ESP_ERROR_CHECK(esp_wifi_init(&cfg));
 
+    ESP_ERROR_CHECK(esp_wifi_set_ps(WIFI_PS_NONE));
+
     esp_event_handler_instance_t instance_any_id;
 
     esp_event_handler_instance_t instance_got_ip;
@@ -102,16 +104,19 @@ int wifiInit() {
 
     /* xEventGroupWaitBits() returns the bits before the call returned, hence we can test which event actually
      * happened. */
+    int ret_value = 0;
     if (bits & WIFI_CONNECTED_BIT) {
         ESP_LOGI(TAG, "Connected to AP With SSID: %s", WIFI_SSID);
-        return CONNECTED;
+        ret_value = CONNECTED;
     } else if (bits & WIFI_FAIL_BIT) {
         ESP_LOGI(TAG, "Failed to connect to AP With SSID: %s", WIFI_SSID);
-        return DISCONNECTED;
+        ret_value = DISCONNECTED;
     } else {
         ESP_LOGE(TAG, "An unexpected event occurred");
-        return ERROR;
+        ret_value = ERROR;
     }
+    vEventGroupDelete(s_wifi_event_group);
+    return ret_value;
 }
 
 wifi_state initWifi() {

@@ -6,6 +6,7 @@
 
 #include <driver/gpio.h>
 #include <driver/ledc.h>
+#include <math.h>
 
 
 Beam configureBeam(gpio_num_t gpio, ledc_channel_t channel, ledc_timer_t timer) {
@@ -36,18 +37,19 @@ Beam configureBeam(gpio_num_t gpio, ledc_channel_t channel, ledc_timer_t timer) 
     Beam target;
     target.gpio = gpio;
     target.channel = channel;
+    target.opticalOutput = 15; // 15mw
     target.active = 0;
 
     return target;
 }
 
-int map_range(int value, int low1, int high1, int low2, int high2) {
+double map_range(double value, double low1, double high1, double low2, double high2) {
     return low2 + (high2 - low2) * (value - low1) / (high1 - low1);
 }
 
 void setBeamOpticalOutput(Beam target, int mw) {
-    int mapped = map_range(mw, 0, target.opticalOutput, 0, (1 << 13) - 1);
-    setBeamOutput(target, mapped);
+    double mapped = map_range(mw, 0, target.opticalOutput, 0, (1 << 13) - 1);
+    setBeamOutput(target, (uint32_t)round(mapped));
 }
 
 void activateBeam(Beam *target) {

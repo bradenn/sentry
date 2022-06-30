@@ -4,7 +4,7 @@
 // Created by Braden Nicholson on 6/14/22.
 //
 Servo configureServo(gpio_num_t gpio, mcpwm_unit_t unit, mcpwm_timer_t timer) {
-    mcpwm_gpio_init(unit, MCPWM0A, gpio);
+    ESP_ERROR_CHECK(mcpwm_gpio_init(unit, MCPWM0A, gpio));
     mcpwm_config_t pwm_config = {
             .frequency = 50, // frequency = 50Hz, i.e. for every servo motor time period should be 20ms
             .cmpr_a = 0,     // duty cycle of PWMxA = 0
@@ -12,7 +12,7 @@ Servo configureServo(gpio_num_t gpio, mcpwm_unit_t unit, mcpwm_timer_t timer) {
             .duty_mode = MCPWM_DUTY_MODE_0,
     };
 
-    mcpwm_init(unit, timer, &pwm_config);
+    ESP_ERROR_CHECK(mcpwm_init(unit, timer, &pwm_config));
     Servo servo;
     servo.timer = timer;
     servo.unit = unit;
@@ -22,7 +22,7 @@ Servo configureServo(gpio_num_t gpio, mcpwm_unit_t unit, mcpwm_timer_t timer) {
 }
 
 void moveTo(Servo *servo, int position) {
-    mcpwm_set_duty_in_us(servo->unit, servo->timer, MCPWM_OPR_A, angleToDuty(position));
+    ESP_ERROR_CHECK(mcpwm_set_duty_in_us(servo->unit, servo->timer, MCPWM_OPR_A, angleToDuty(position)));
     servo->position = position;
 //    vTaskDelay(pdMS_TO_TICKS(10));
 }

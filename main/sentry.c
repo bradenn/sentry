@@ -6,6 +6,15 @@
 #include <cJSON.h>
 #include <esp_mac.h>
 
+
+//double readTemp(Sentry sentry) {
+//    ESP_ERROR_CHECK(temperature_sensor_enable(sentry.temp));
+//    float tsens_out;
+//    ESP_ERROR_CHECK(temperature_sensor_get_celsius(sentry.temp, &tsens_out));
+//    ESP_ERROR_CHECK(temperature_sensor_disable(sentry.temp));
+//    return (double) tsens_out;
+//}
+
 char *formatJSON(Sentry sentry) {
 
     // Parent Status Object
@@ -15,11 +24,9 @@ char *formatJSON(Sentry sentry) {
     cJSON *system = cJSON_CreateObject();
 
     // Get the mac address
-    uint8_t mac[6];
-    esp_read_mac(mac, ESP_MAC_WIFI_STA);
-    char address[48];
-    sprintf(address, "%x:%x:%x:%x:%x:%x", mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
-    cJSON_AddItemToObject(system, "mac", cJSON_CreateString(address));
+
+    cJSON_AddItemToObject(system, "mac", cJSON_CreateString(sentry.macAddress));
+//    cJSON_AddItemToObject(system, "temp", cJSON_CreateNumber(readTemp(sentry)));
 
     cJSON_AddItemToObject(status, "system", system);
     // Servo Object
@@ -48,4 +55,17 @@ char *formatJSON(Sentry sentry) {
     cJSON_Delete(status);
 
     return formatted;
+}
+
+void init(Sentry *sentry) {
+//    sentry->temp = NULL;
+//    temperature_sensor_config_t temp_sensor = {
+//            .range_min = 20,
+//            .range_max = 50,
+//    };
+//    ESP_ERROR_CHECK(temperature_sensor_install(&temp_sensor, &sentry->temp));
+
+    uint8_t mac[6];
+    esp_read_mac(mac, ESP_MAC_WIFI_STA);
+    sprintf(sentry->macAddress, "%x:%x:%x:%x:%x:%x", mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
 }

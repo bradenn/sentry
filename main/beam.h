@@ -23,7 +23,13 @@ Beam configureBeam(gpio_num_t gpio, ledc_channel_t channel, ledc_timer_t timer);
 
 void setBeamOutput(Beam target, uint32_t duty);
 
+void setBeamOpticalOutput(Beam target, int mw);
+
 void applyBeamOutput(Beam target);
+
+void activateBeam(Beam *target);
+
+void deactivateBeam(Beam *target);
 
 
 #endif //MAIN_BEAM_H

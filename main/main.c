@@ -3,6 +3,7 @@
 //
 
 #include <math.h>
+
 #include "sdkconfig.h"
 
 #include "beam.h"
@@ -25,19 +26,24 @@ int map_rangeI(double value, double low1, double high1, double low2, double high
 
 void app_main(void) {
 
-    initIndicator();
-    setIndicator(RED);
+
 
     Sentry sentry;
+
+    init(&sentry);
 
     sentry.pan = configureServo(SERVO_PAN, MCPWM_UNIT_0, MCPWM_TIMER_0);
     sentry.tilt = configureServo(SERVO_TILT, MCPWM_UNIT_1, MCPWM_TIMER_0);
 
+    moveTo(&sentry.pan, 0);
+    moveTo(&sentry.tilt, 0);
+    initIndicator();
+    setIndicator(RED);
     sentry.primary = configureBeam(BEAM_PRIMARY_PIN, LEDC_CHANNEL_1, LEDC_TIMER_2);
-    sentry.secondary = configureBeam(BEAM_SECONDARY_PIN, LEDC_CHANNEL_0, LEDC_TIMER_1);
+    sentry.secondary = configureBeam(BEAM_SECONDARY_PIN, LEDC_CHANNEL_0, LEDC_TIMER_2);
 
     setupServer(sentry);
-//
+
 //    int deg = 0;
 //    int dir = 0;
 //
