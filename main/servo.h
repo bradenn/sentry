@@ -9,7 +9,7 @@
 #define MIN_PULSE_US  (500)
 #define MAX_PULSE_US  (2400)
 
-#define MAX_POSITION (256)
+#define MAX_POSITION (90)
 
 static inline uint32_t angleToDuty(int angle)
 {
