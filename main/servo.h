@@ -11,10 +11,6 @@
 
 #define MAX_POSITION (90)
 
-static inline uint32_t angleToDuty(int angle)
-{
-    return (angle + MAX_POSITION) * (MAX_PULSE_US - MIN_PULSE_US) / (2 * MAX_POSITION) + MIN_PULSE_US;
-}
 
 typedef struct Servo {
     gpio_num_t gpio;

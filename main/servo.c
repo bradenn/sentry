@@ -3,6 +3,13 @@
 //
 // Created by Braden Nicholson on 6/14/22.
 //
+
+static uint32_t angleToDuty(int angle)
+{
+    return (angle + MAX_POSITION) * (MAX_PULSE_US - MIN_PULSE_US) / (2 * MAX_POSITION) + MIN_PULSE_US;
+}
+
+
 Servo configureServo(gpio_num_t gpio, mcpwm_unit_t unit, mcpwm_timer_t timer) {
     ESP_ERROR_CHECK(mcpwm_gpio_init(unit, MCPWM0A, gpio));
     mcpwm_config_t pwm_config = {
@@ -22,6 +29,9 @@ Servo configureServo(gpio_num_t gpio, mcpwm_unit_t unit, mcpwm_timer_t timer) {
 }
 
 void moveTo(Servo *servo, int position) {
+    if(position < -MAX_POSITION || position > MAX_POSITION){
+        return;
+    }
     ESP_ERROR_CHECK(mcpwm_set_duty_in_us(servo->unit, servo->timer, MCPWM_OPR_A, angleToDuty(position)));
     servo->position = position;
 //    vTaskDelay(pdMS_TO_TICKS(10));

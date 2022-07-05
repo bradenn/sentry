@@ -9,156 +9,30 @@
 #include <sys/param.h>
 #include "esp_netif.h"
 #include "esp_eth.h"
-
-#include "esp_tls_crypto.h"
+#include <esp_http_server.h>
 #include "wifi.h"
 #include "indicator.h"
 #include "sentry.h"
-#include <esp_http_server.h>
 #include <cJSON.h>
 #include <esp_timer.h>
 
 static const char *TAG = "HTTP";
-
-typedef struct {
-    char *username;
-    char *password;
-} basic_auth_info_t;
 
 #define HTTPD_401      "401 UNAUTHORIZED"           /*!< HTTP Response 401 */
 
 #define USERNAME CONFIG_SENTRY_AUTH_USER
 #define PASSWORD CONFIG_SENTRY_AUTH_PASS
 
-
-static char *http_auth_basic(const char *username, const char *password) {
-    int out;
-    char *user_info = NULL;
-    char *digest = NULL;
-    size_t n = 0;
-    asprintf(&user_info, "%s:%s", username, password);
-    if (!user_info) {
-        ESP_LOGE(TAG, "No enough memory for user information");
-        return NULL;
-    }
-    esp_crypto_base64_encode(NULL, 0, &n, (const unsigned char *) user_info, strlen(user_info));
-
-    /* 6: The length of the "Basic " string
-     * n: Number of bytes for a base64 encode format
-     * 1: Number of bytes for a reserved which be used to fill zero
-    */
-    digest = calloc(1, 6 + n + 1);
-    if (digest) {
-        strcpy(digest, "Basic ");
-        esp_crypto_base64_encode((unsigned char *) digest + 6, n, (size_t *) &out, (const unsigned char *) user_info,
-                                 strlen(user_info));
-    }
-    free(user_info);
-    return digest;
-}
-
-/* An HTTP GET handler */
-static esp_err_t basic_auth_get_handler(httpd_req_t *req) {
-    char *buf = NULL;
-    size_t buf_len = 0;
-    basic_auth_info_t *basic_auth_info = req->user_ctx;
-
-    buf_len = httpd_req_get_hdr_value_len(req, "Authorization") + 1;
-    if (buf_len > 1) {
-        buf = calloc(1, buf_len);
-        if (!buf) {
-            ESP_LOGE(TAG, "No enough memory for basic authorization");
-            return ESP_ERR_NO_MEM;
-        }
-
-        if (httpd_req_get_hdr_value_str(req, "Authorization", buf, buf_len) == ESP_OK) {
-            ESP_LOGI(TAG, "Found header => Authorization: %s", buf);
-        } else {
-            ESP_LOGE(TAG, "No auth value received");
-        }
-
-        char *auth_credentials = http_auth_basic(basic_auth_info->username, basic_auth_info->password);
-        if (!auth_credentials) {
-            ESP_LOGE(TAG, "No enough memory for basic authorization credentials");
-            free(buf);
-            return ESP_ERR_NO_MEM;
-        }
-
-        if (strncmp(auth_credentials, buf, buf_len) != 0) {
-            ESP_LOGE(TAG, "Not authenticated");
-            httpd_resp_set_status(req, HTTPD_401);
-            httpd_resp_set_type(req, "application/json");
-            httpd_resp_set_hdr(req, "Connection", "keep-alive");
-            httpd_resp_set_hdr(req, "WWW-Authenticate", "Basic realm=\"Hello\"");
-            httpd_resp_send(req, NULL, 0);
-        } else {
-            ESP_LOGI(TAG, "Authenticated!");
-            char *basic_auth_resp = NULL;
-            httpd_resp_set_status(req, HTTPD_200);
-            httpd_resp_set_type(req, "application/json");
-            httpd_resp_set_hdr(req, "Connection", "keep-alive");
-            asprintf(&basic_auth_resp, "{\"authenticated\": true,\"user\": \"%s\"}", basic_auth_info->username);
-            if (!basic_auth_resp) {
-                ESP_LOGE(TAG, "No enough memory for basic authorization response");
-                free(auth_credentials);
-                free(buf);
-                return ESP_ERR_NO_MEM;
-            }
-            httpd_resp_send(req, basic_auth_resp, strlen(basic_auth_resp));
-            free(basic_auth_resp);
-        }
-        free(auth_credentials);
-        free(buf);
-    } else {
-        ESP_LOGE(TAG, "No auth header received");
-        httpd_resp_set_status(req, HTTPD_401);
-        httpd_resp_set_type(req, "application/json");
-        httpd_resp_set_hdr(req, "Connection", "keep-alive");
-        httpd_resp_set_hdr(req, "WWW-Authenticate", "Basic realm=\"Hello\"");
-        httpd_resp_send(req, NULL, 0);
-    }
-
-    return ESP_OK;
-}
-
-static httpd_uri_t basic_auth = {
-        .uri       = "/auth",
-        .method    = HTTP_GET,
-        .handler   = basic_auth_get_handler,
-};
-
-static void httpd_register_basic_auth(httpd_handle_t server) {
-    basic_auth_info_t *basic_auth_info = calloc(1, sizeof(basic_auth_info_t));
-    if (basic_auth_info) {
-        basic_auth_info->username = USERNAME;
-        basic_auth_info->password = PASSWORD;
-
-        basic_auth.user_ctx = basic_auth_info;
-        httpd_register_uri_handler(server, &basic_auth);
-    }
-}
-
 static Sentry sentry;
 
 /* An HTTP GET handler */
 static esp_err_t getStatusHandler(httpd_req_t *req) {
-    httpd_resp_set_type(req, "application/json");
-    /* Set CORS header */
-    httpd_resp_set_hdr(req, "Access-Control-Allow-Origin", "*");
 
-    /* Send response with custom headers and body set as the
-     * string passed in user context*/
+    httpd_resp_set_type(req, "application/json");
 
     char *resp_str = formatJSON(sentry);
 
-
     httpd_resp_send(req, resp_str, HTTPD_RESP_USE_STRLEN);
-
-    /* After sending the HTTP response the old HTTP request
-     * headers are lost. Check if HTTP request headers can be read now. */
-    if (httpd_req_get_hdr_value_len(req, "Host") == 0) {
-        ESP_LOGI(TAG, "Request headers lost");
-    }
 
     free(resp_str);
     return ESP_OK;
@@ -181,7 +55,6 @@ void respondError(httpd_req_t *req, char *msg) {
 /* An HTTP PUT handler */
 static esp_err_t positionHandler(httpd_req_t *req) {
 
-
     char content[100];
 
     /* Truncate if content length larger than the buffer */
@@ -203,35 +76,39 @@ static esp_err_t positionHandler(httpd_req_t *req) {
 
     cJSON *request = cJSON_Parse(content);
 
-    if (!cJSON_HasObjectItem(request, "target") || !cJSON_HasObjectItem(request, "position")) {
-        httpd_resp_send_404(req);
-        cJSON_Delete(request);
-        return ESP_FAIL;
-    }
-
-    char *target = cJSON_GetObjectItem(request, "target")->valuestring;
-
-    int pos = cJSON_GetObjectItem(request, "position")->valueint;
-
-    if (strncmp(target, "pan", 3) == 0) {
-        moveTo(&sentry.pan, pos);
-    } else if (strncmp(target, "tilt", 4) == 0) {
-        moveTo(&sentry.tilt, pos);
+    if (cJSON_HasObjectItem(request, "token")) {
+        char *token = cJSON_GetObjectItem(request, "token")->valuestring;
+        if (strncmp(token, PASSWORD, strlen(PASSWORD)) != 0) {
+            respondError(req, "invalid token, this even has been logged.");
+            cJSON_Delete(request);
+            return ESP_FAIL;
+        }
     } else {
-        respondError(req, "target servo does not exist");
+        respondError(req, "a security token must be provided");
         cJSON_Delete(request);
         return ESP_FAIL;
     }
+
+    int panPos;
+    int tiltPos;
+
+    if (cJSON_HasObjectItem(request, "pan")) {
+        panPos = cJSON_GetObjectItem(request, "pan")->valueint;
+        moveTo(&sentry.pan, panPos);
+    }
+
+    if (cJSON_HasObjectItem(request, "tilt")) {
+        tiltPos = cJSON_GetObjectItem(request, "tilt")->valueint;
+        moveTo(&sentry.tilt, tiltPos);
+    }
+
+
+    cJSON_Delete(request);
 
     char *resp_str = formatJSON(sentry);
     httpd_resp_set_type(req, "application/json");
-    /* Set CORS header */
-    httpd_resp_set_hdr(req, "Access-Control-Allow-Origin", "*");
     httpd_resp_send(req, resp_str, HTTPD_RESP_USE_STRLEN);
-
     free(resp_str);
-
-    cJSON_Delete(request);
 
     return ESP_OK;
 }
@@ -331,24 +208,19 @@ esp_err_t http_404_error_handler(httpd_req_t *req, httpd_err_code_t err) {
 static httpd_handle_t start_webserver(void) {
     httpd_handle_t server = NULL;
     httpd_config_t config = HTTPD_DEFAULT_CONFIG();
-    config.max_resp_headers = 10;
-    config.lru_purge_enable = true;
 
-
+    esp_err_t ret = httpd_start(&server, &config);
+    if (ESP_OK != ret) {
+        ESP_LOGI(TAG, "Error starting server!");
+        return NULL;
+    }
     // Start the httpd server
     ESP_LOGI(TAG, "Starting server on port: '%d'", config.server_port);
-    if (httpd_start(&server, &config) == ESP_OK) {
-        // Set URI handlers
-        ESP_LOGI(TAG, "Registering URI handlers");
-        httpd_register_uri_handler(server, &status);
-        httpd_register_uri_handler(server, &position);
-        httpd_register_uri_handler(server, &beam);
-        httpd_register_basic_auth(server);
-        return server;
-    }
+    httpd_register_uri_handler(server, &status);
+    httpd_register_uri_handler(server, &position);
+    httpd_register_uri_handler(server, &beam);
 
-    ESP_LOGI(TAG, "Error starting server!");
-    return NULL;
+    return server;
 }
 
 static esp_err_t stop_webserver(httpd_handle_t server) {
