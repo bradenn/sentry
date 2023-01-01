@@ -47,9 +47,9 @@ double map_range(double value, double low1, double high1, double low2, double hi
     return low2 + (high2 - low2) * (value - low1) / (high1 - low1);
 }
 
-void setBeamOpticalOutput(Beam target, int mw) {
-    double mapped = map_range(mw, 0, target.opticalOutput, 0, (1 << 13) - 1);
-    setBeamOutput(target, (uint32_t)round(mapped));
+void setBeamOpticalOutput(Beam *target, double mw) {
+    double mapped = map_range(mw, 0, (double) target->opticalOutput, 0, (1 << 13) - 1);
+    setBeamOutput(target, (uint32_t) round(mapped));
 }
 
 void activateBeam(Beam *target) {
@@ -62,9 +62,10 @@ void deactivateBeam(Beam *target) {
     target->active = 0;
 }
 
-void setBeamOutput(Beam target, uint32_t duty) {
-    ESP_ERROR_CHECK(ledc_set_duty(BEAM_SPEED_MODE, target.channel, duty));
-    if (target.active) {
-        ESP_ERROR_CHECK(ledc_update_duty(BEAM_SPEED_MODE, target.channel));
+void setBeamOutput(Beam *target, uint32_t duty) {
+    ESP_ERROR_CHECK(ledc_set_duty(BEAM_SPEED_MODE, target->channel, duty));
+    target->duty = (double) duty / ((1 << 13) - 1);
+    if (target->active) {
+        ESP_ERROR_CHECK(ledc_update_duty(BEAM_SPEED_MODE, target->channel));
     }
 }

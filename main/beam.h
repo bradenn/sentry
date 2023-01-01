@@ -10,20 +10,21 @@
 #include <driver/gpio.h>
 #include <driver/ledc.h>
 
-#define BEAM_SPEED_MODE LEDC_HIGH_SPEED_MODE
+#define BEAM_SPEED_MODE LEDC_LOW_SPEED_MODE
 
 typedef struct Beam {
     gpio_num_t gpio;
     ledc_channel_t channel;
     int opticalOutput;
+    double duty;
     int active;
 } Beam;
 
 Beam configureBeam(gpio_num_t gpio, ledc_channel_t channel, ledc_timer_t timer);
 
-void setBeamOutput(Beam target, uint32_t duty);
+void setBeamOutput(Beam *target, uint32_t duty);
 
-void setBeamOpticalOutput(Beam target, int mw);
+void setBeamOpticalOutput(Beam *target, double mw);
 
 void applyBeamOutput(Beam target);
 

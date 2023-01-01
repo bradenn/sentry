@@ -160,19 +160,19 @@ static esp_err_t beamHandler(httpd_req_t *req) {
     char *target = cJSON_GetObjectItem(request, "target")->valuestring;
 
     int pos = cJSON_GetObjectItem(request, "active")->valueint;
-    int power = cJSON_GetObjectItem(request, "power")->valueint;
+    double power = cJSON_GetObjectItem(request, "power")->valuedouble;
 
     if (strncmp(target, "primary", 7) == 0) {
         if (pos == 1) {
             activateBeam(&sentry.primary);
-            setBeamOpticalOutput(sentry.primary, power);
+            setBeamOpticalOutput(&sentry.primary, power);
         } else {
             deactivateBeam(&sentry.primary);
         }
     } else if (strncmp(target, "secondary", 9) == 0) {
         if (pos == 1) {
             activateBeam(&sentry.secondary);
-            setBeamOpticalOutput(sentry.secondary, power);
+            setBeamOpticalOutput(&sentry.secondary, power);
         } else {
             deactivateBeam(&sentry.secondary);
         }
@@ -192,6 +192,66 @@ static esp_err_t beamHandler(httpd_req_t *req) {
 
     return ESP_OK;
 }
+
+/* An HTTP GET handler */
+static esp_err_t socketHandler(httpd_req_t *req) {
+    if (req->method == HTTP_GET) {
+        ESP_LOGI(TAG, "Handshake done, the new connection was opened");
+        return ESP_OK;
+    }
+
+    uint8_t *buffer = NULL;
+    httpd_ws_frame_t ws_pkt;
+
+    memset(&ws_pkt, 0, sizeof(httpd_ws_frame_t));
+    ws_pkt.type = HTTPD_WS_TYPE_TEXT;
+
+    esp_err_t ret = httpd_ws_recv_frame(req, &ws_pkt, 0);
+    if (ret != ESP_OK) {
+        ESP_LOGE(TAG, "httpd_ws_recv_frame failed with %d", ret);
+        return ret;
+    }
+
+    if (ws_pkt.len) {
+
+        buffer = (uint8_t *) calloc(1, ws_pkt.len + 1);
+        ws_pkt.payload = buffer;
+
+        ret = httpd_ws_recv_frame(req, &ws_pkt, ws_pkt.len);
+        if (ret != ESP_OK) {
+            ESP_LOGE(TAG, "httpd_ws_recv_frame failed with %d", ret);
+            free(buffer);
+            return ret;
+        }
+//        ESP_LOGI(TAG, "Got packet with message: %s", ws_pkt.payload);
+
+//        ESP_LOGI(TAG, "Packet type: %d", ws_pkt.type);
+        if (ws_pkt.type == HTTPD_WS_TYPE_TEXT) {
+            cJSON *request = cJSON_Parse((char *)(ws_pkt.payload));
+            int pan = cJSON_GetObjectItem(request, "pan")->valueint;
+            int tilt = cJSON_GetObjectItem(request, "tilt")->valueint;
+            moveTo(&sentry.pan, pan);
+            moveTo(&sentry.tilt, tilt);
+
+            cJSON_Delete(request);
+            free(buffer);
+            return 0;
+        }
+        free(buffer);
+    }
+
+
+    return 0;
+}
+
+
+static const httpd_uri_t websockets = {
+        .uri       = "/ws",
+        .method    = HTTP_GET,
+        .handler   = socketHandler,
+        .user_ctx = NULL,
+        .is_websocket = true,               // Mandatory: set to `true` to handler websocket protocol
+};
 
 static const httpd_uri_t beam = {
         .uri       = "/beam",
@@ -216,6 +276,7 @@ static httpd_handle_t start_webserver(void) {
     }
     // Start the httpd server
     ESP_LOGI(TAG, "Starting server on port: '%d'", config.server_port);
+    httpd_register_uri_handler(server, &websockets);
     httpd_register_uri_handler(server, &status);
     httpd_register_uri_handler(server, &position);
     httpd_register_uri_handler(server, &beam);

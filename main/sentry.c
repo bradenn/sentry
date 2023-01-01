@@ -41,11 +41,18 @@ char *formatJSON(Sentry sentry) {
     // Beam Object
     cJSON *beams = cJSON_CreateObject();
 
-    cJSON *beamPrimary = cJSON_CreateBool(sentry.primary.active == 1);
-    cJSON_AddItemToObject(beams, "primary", beamPrimary);
+    cJSON *primaryBeam = cJSON_CreateObject();
+    cJSON_AddItemToObject(primaryBeam, "active", cJSON_CreateBool(sentry.primary.active == 1));
+    cJSON_AddItemToObject(primaryBeam, "power", cJSON_CreateNumber(sentry.primary.duty * (double) sentry.primary
+            .opticalOutput));
 
-    cJSON *beamSecondary = cJSON_CreateBool(sentry.secondary.active == 1);
-    cJSON_AddItemToObject(beams, "secondary", beamSecondary);
+    cJSON *secondaryBeam = cJSON_CreateObject();
+    cJSON_AddItemToObject(secondaryBeam, "active", cJSON_CreateBool(sentry.secondary.active == 1));
+    cJSON_AddItemToObject(secondaryBeam, "power", cJSON_CreateNumber(sentry.secondary.duty * (double) sentry.secondary
+            .opticalOutput));
+
+    cJSON_AddItemToObject(beams, "primary", primaryBeam);
+    cJSON_AddItemToObject(beams, "secondary", secondaryBeam);
 
     cJSON_AddItemToObject(status, "servos", servos);
     cJSON_AddItemToObject(status, "beams", beams);
