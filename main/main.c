@@ -31,15 +31,16 @@ void app_main(void) {
 
     sentry.pan = configureServo(SERVO_PAN, MCPWM_UNIT_0, MCPWM_TIMER_0);
     sentry.tilt = configureServo(SERVO_TILT, MCPWM_UNIT_1, MCPWM_TIMER_0);
-
     moveTo(&sentry.pan, 0);
     moveTo(&sentry.tilt, 0);
+    moveSentry(&sentry, 0, 0);
     initIndicator();
     setIndicator(RED);
     sentry.primary = configureBeam(BEAM_PRIMARY_PIN, LEDC_CHANNEL_1, LEDC_TIMER_2);
     sentry.secondary = configureBeam(BEAM_SECONDARY_PIN, LEDC_CHANNEL_0, LEDC_TIMER_2);
+    setBeamOpticalOutput(&sentry.primary, 0);
+    setBeamOpticalOutput(&sentry.secondary, 0);
 
 
-
-    setupServer(sentry);
+    setupServer(&sentry);
 }

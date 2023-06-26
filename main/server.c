@@ -23,7 +23,7 @@ static const char *TAG = "HTTP";
 #define USERNAME CONFIG_SENTRY_AUTH_USER
 #define PASSWORD CONFIG_SENTRY_AUTH_PASS
 
-static Sentry sentry;
+static Sentry *sentry;
 
 /* An HTTP GET handler */
 static esp_err_t getStatusHandler(httpd_req_t *req) {
@@ -94,12 +94,12 @@ static esp_err_t positionHandler(httpd_req_t *req) {
 
     if (cJSON_HasObjectItem(request, "pan")) {
         panPos = cJSON_GetObjectItem(request, "pan")->valueint;
-        moveTo(&sentry.pan, panPos);
+        moveTo(&sentry->pan, panPos);
     }
 
     if (cJSON_HasObjectItem(request, "tilt")) {
         tiltPos = cJSON_GetObjectItem(request, "tilt")->valueint;
-        moveTo(&sentry.tilt, tiltPos);
+        moveTo(&sentry->tilt, tiltPos);
     }
 
 
@@ -164,17 +164,17 @@ static esp_err_t beamHandler(httpd_req_t *req) {
 
     if (strncmp(target, "primary", 7) == 0) {
         if (pos == 1) {
-            activateBeam(&sentry.primary);
-            setBeamOpticalOutput(&sentry.primary, power);
+            activateBeam(&sentry->primary);
+            setBeamOpticalOutput(&sentry->primary, power);
         } else {
-            deactivateBeam(&sentry.primary);
+            deactivateBeam(&sentry->primary);
         }
     } else if (strncmp(target, "secondary", 9) == 0) {
         if (pos == 1) {
-            activateBeam(&sentry.secondary);
-            setBeamOpticalOutput(&sentry.secondary, power);
+            activateBeam(&sentry->secondary);
+            setBeamOpticalOutput(&sentry->secondary, power);
         } else {
-            deactivateBeam(&sentry.secondary);
+            deactivateBeam(&sentry->secondary);
         }
     } else {
         respondError(req, "target beam does not exist");
@@ -193,10 +193,14 @@ static esp_err_t beamHandler(httpd_req_t *req) {
     return ESP_OK;
 }
 
+
+
 /* An HTTP GET handler */
 static esp_err_t socketHandler(httpd_req_t *req) {
     if (req->method == HTTP_GET) {
         ESP_LOGI(TAG, "Handshake done, the new connection was opened");
+        setSession(sentry, req);
+        sendUpdateToClient(sentry);
         return ESP_OK;
     }
 
@@ -230,11 +234,11 @@ static esp_err_t socketHandler(httpd_req_t *req) {
             cJSON *request = cJSON_Parse((char *)(ws_pkt.payload));
             int pan = cJSON_GetObjectItem(request, "pan")->valueint;
             int tilt = cJSON_GetObjectItem(request, "tilt")->valueint;
-            moveTo(&sentry.pan, pan);
-            moveTo(&sentry.tilt, tilt);
+            moveSentry(sentry, pan, tilt);
 
             cJSON_Delete(request);
             free(buffer);
+
             return 0;
         }
         free(buffer);
@@ -243,6 +247,8 @@ static esp_err_t socketHandler(httpd_req_t *req) {
 
     return 0;
 }
+
+
 
 
 static const httpd_uri_t websockets = {
@@ -310,10 +316,10 @@ static void connect_handler(void *arg, esp_event_base_t event_base,
     }
 }
 
-void setupServer(Sentry sen) {
+void setupServer(Sentry *sen) {
     sentry = sen;
-    moveTo(&sentry.pan, 0);
-    moveTo(&sentry.tilt, 0);
+    moveTo(&sentry->pan, 0);
+    moveTo(&sentry->tilt, 0);
     setIndicator(RED);
 
     ESP_ERROR_CHECK(nvs_flash_init());
@@ -329,7 +335,7 @@ void setupServer(Sentry sen) {
 
     static httpd_handle_t server = NULL;
     ESP_ERROR_CHECK(esp_event_handler_register(IP_EVENT, IP_EVENT_STA_GOT_IP, &connect_handler, &server));
-    ESP_ERROR_CHECK(esp_event_handler_register(WIFI_EVENT, WIFI_EVENT_STA_DISCONNECTED, &disconnect_handler, &server));
+//    ESP_ERROR_CHECK(esp_event_handler_register(IP_EVENT, WIFI_EVENT_STA_DISCONNECTED, &disconnect_handler, &server));
     server = start_webserver();
 
     /* Start the server for the first time */

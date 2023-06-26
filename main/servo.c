@@ -47,7 +47,7 @@ void moveTo(Servo *servo, int position) {
     while (current != angleToDuty(position)) {
         current += angleToDuty(position) > current ? 1 : -1;
         ESP_ERROR_CHECK(mcpwm_set_duty_in_us(servo->unit, servo->timer, MCPWM_OPR_A, current));
-        vTaskDelay(pdMS_TO_TICKS(4));
+        vTaskDelay(pdMS_TO_TICKS(2));
     }
     servo->position = position;
 }

@@ -12,6 +12,6 @@
 
 void startServer();
 
-void setupServer(Sentry sentry);
+void setupServer(Sentry *sentry);
 
 #endif //SENTRY_SERVER_H
